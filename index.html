@@ -1,0 +1,138 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<title>月夜のタロット — Moonlit Tarot</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;1,400;1,500&family=Noto+Sans+JP:wght@300;400;500;600&family=Noto+Serif+JP:wght@400;500;600&display=swap" rel="stylesheet" />
+<link rel="stylesheet" href="tarot-styles.css" />
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script src="tarot-data.js"></script>
+<script type="text/babel" src="tarot-glyphs.jsx"></script>
+<script type="text/babel" src="tarot-card.jsx"></script>
+<script type="text/babel" src="tarot-screens.jsx"></script>
+<script type="text/babel" src="tweaks-panel.jsx"></script>
+
+<script type="text/babel">
+const { useState, useEffect, useRef } = React;
+
+const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
+  "starDensity": 1.0,
+  "soundOn": true,
+  "interpretLength": "standard",
+  "accent": "gold"
+}/*EDITMODE-END*/;
+
+const ACCENTS = {
+  gold: { gold: "#d4af37", goldLight: "#f0d57a", goldBright: "#f4d160", goldDeep: "#b88f3d" },
+  silver: { gold: "#bfc8d6", goldLight: "#e6ecf5", goldBright: "#f5faff", goldDeep: "#7d8898" },
+  rose: { gold: "#d68aa4", goldLight: "#f0bccd", goldBright: "#f7d4e0", goldDeep: "#a8617a" },
+};
+
+function App() {
+  const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
+  const [view, setView] = useState({ name: "landing" });
+  const [history, setHistory] = useState(() => {
+    try { return JSON.parse(localStorage.getItem(HISTORY_KEY) || "[]"); } catch { return []; }
+  });
+
+  const sound = useSound(t.soundOn);
+
+  // アクセント色を CSS 変数に反映
+  useEffect(() => {
+    const a = ACCENTS[t.accent] || ACCENTS.gold;
+    const root = document.documentElement;
+    root.style.setProperty("--gold", a.gold);
+    root.style.setProperty("--gold-light", a.goldLight);
+    root.style.setProperty("--gold-bright", a.goldBright);
+    root.style.setProperty("--gold-deep", a.goldDeep);
+  }, [t.accent]);
+
+  const saveHistory = (entry) => {
+    const next = [...history, entry].slice(-30);
+    setHistory(next);
+    try { localStorage.setItem(HISTORY_KEY, JSON.stringify(next)); } catch {}
+  };
+  const clearHistory = () => {
+    if (!confirm("履歴をすべて削除しますか？")) return;
+    setHistory([]);
+    try { localStorage.removeItem(HISTORY_KEY); } catch {}
+  };
+
+  return (
+    <div className="app-shell">
+      <Starfield density={t.starDensity} />
+
+      <div className="topbar">
+        <div className="topbar-brand">
+          <span className="mini-mark">
+            <svg viewBox="0 0 28 28" width="28" height="28">
+              <circle cx="14" cy="14" r="11" fill="none" stroke="var(--gold)" strokeWidth="0.6" opacity="0.7" />
+              <circle cx="14" cy="14" r="2.5" fill="var(--gold)" />
+              {Array.from({ length: 8 }).map((_, i) => {
+                const a = (i / 8) * Math.PI * 2;
+                return <circle key={i} cx={14 + Math.cos(a) * 11} cy={14 + Math.sin(a) * 11} r="0.8" fill="var(--gold)" />;
+              })}
+            </svg>
+          </span>
+          月夜のタロット
+        </div>
+        <div className="topbar-actions">
+          <button className={`icon-btn ${t.soundOn ? "active" : ""}`} onClick={() => setTweak("soundOn", !t.soundOn)} title={t.soundOn ? "音オン" : "音オフ"}>
+            {t.soundOn ? "♪" : "♪̸"}
+          </button>
+          <button className="icon-btn" onClick={() => setView({ name: "history" })} title="履歴">⌛</button>
+        </div>
+      </div>
+
+      {view.name === "landing" && (
+        <LandingScreen onStart={() => setView({ name: "theme" })} />
+      )}
+      {view.name === "theme" && (
+        <ThemeScreen onPick={(theme) => setView({ name: "select", theme })} onBack={() => setView({ name: "landing" })} />
+      )}
+      {view.name === "select" && (
+        <SelectScreen
+          theme={view.theme}
+          sound={sound}
+          onBack={() => setView({ name: "theme" })}
+          onComplete={(picks) => setView({ name: "result", theme: view.theme, picks })}
+        />
+      )}
+      {view.name === "result" && (
+        <ResultScreen
+          theme={view.theme}
+          picks={view.picks}
+          sound={sound}
+          onSave={saveHistory}
+          onRestart={() => setView({ name: "theme" })}
+        />
+      )}
+      {view.name === "history" && (
+        <HistoryScreen history={history} onClose={() => setView({ name: "landing" })} onClear={clearHistory} />
+      )}
+
+      <TweaksPanel title="Tweaks">
+        <TweakSection label="演出" />
+        <TweakSlider label="星空の密度" value={t.starDensity} min={0.3} max={2.5} step={0.1} unit="x" onChange={(v) => setTweak("starDensity", v)} />
+        <TweakToggle label="効果音" value={t.soundOn} onChange={(v) => setTweak("soundOn", v)} />
+        <TweakSection label="ビジュアル" />
+        <TweakRadio label="アクセント色" value={t.accent} options={["gold", "silver", "rose"]} onChange={(v) => setTweak("accent", v)} />
+      </TweaksPanel>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App />);
+</script>
+</body>
+</html>

@@ -127,9 +127,9 @@ const ThemeScreen = ({ onPick, onBack }) => (
 
 // ─────────── 画面：シャッフル＋選択 ───────────
 const SelectScreen = ({ theme, onComplete, onBack, sound }) => {
-  const [phase, setPhase] = uS("shuffling"); // shuffling -> spread -> selecting -> done
+  const [phase, setPhase] = uS("shuffling");
   const [deck, setDeck] = uS([]);
-  const [picked, setPicked] = uS([]); // [{cardIdx, reversed}]
+  const [picked, setPicked] = uS([]);
 
   uE(() => {
     sound.shuffle();
@@ -220,15 +220,14 @@ const SelectScreen = ({ theme, onComplete, onBack, sound }) => {
   );
 };
 
-// ─────────── 画面：結果 ───────────
-const ResultScreen = ({ theme, picks, onRestart, onSave, sound }) => {
+// ─────────── 画面：結果（強化版） ───────────
+const ResultScreen = ({ theme, picks, onRestart, onSave, onPersonal, sound }) => {
   const [revealed, setRevealed] = uS([false, false, false]);
   const [interpretations, setInterpretations] = uS([null, null, null]);
   const [overall, setOverall] = uS(null);
   const [loadingAi, setLoadingAi] = uS(false);
   const [aiTried, setAiTried] = uS(false);
 
-  // 順番にめくる
   uE(() => {
     const timers = [];
     [0, 1, 2].forEach(i => {
@@ -241,7 +240,6 @@ const ResultScreen = ({ theme, picks, onRestart, onSave, sound }) => {
     return () => timers.forEach(clearTimeout);
   }, []);
 
-  // 静的解釈をデフォルトでセット
   uE(() => {
     const stat = picks.map(p => {
       const c = MAJOR_ARCANA[p.cardIdx];
@@ -251,7 +249,6 @@ const ResultScreen = ({ theme, picks, onRestart, onSave, sound }) => {
     setInterpretations(stat);
   }, []);
 
-  // 全カード公開後にAI解釈を試行
   uE(() => {
     if (!revealed.every(Boolean) || aiTried) return;
     setAiTried(true);
@@ -282,11 +279,8 @@ ${cardsBrief}
         const keys = ["past", "present", "future"];
         setInterpretations(keys.map(k => ({ text: data[k], source: "ai" })));
         setOverall(data.overall);
-      } catch (e) {
-        // フォールバック維持
-      } finally {
-        setLoadingAi(false);
-      }
+      } catch (e) {}
+      finally { setLoadingAi(false); }
     }).catch(() => setLoadingAi(false));
   }, [revealed]);
 
@@ -362,6 +356,18 @@ ${cardsBrief}
               })()}
             </p>
           )}
+
+          <div className="personal-cta">
+            <div className="personal-cta-divider" />
+            <p className="personal-cta-text">
+              より深い鑑定を受けてみませんか？<br />
+              あなたの情報をもとに、世界にたった一つのパーソナル鑑定書をお作りします。
+            </p>
+            <button className="btn-primary btn-personal" onClick={onPersonal}>
+              ✦ パーソナル鑑定を受ける
+            </button>
+          </div>
+
           <div className="result-actions">
             <button className="btn-ghost" onClick={onShare}>結果をシェア</button>
             <button className="btn-ghost" onClick={() => onSave({ theme, picks, overall, ts: Date.now() })}>履歴に保存</button>
@@ -369,6 +375,163 @@ ${cardsBrief}
           </div>
         </div>
       )}
+    </div>
+  );
+};
+
+// ─────────── 画面：お客さん情報入力 ───────────
+const CustomerInfoScreen = ({ theme, picks, onSubmit, onBack }) => {
+  const [name, setName] = uS("");
+  const [birthYear, setBirthYear] = uS("");
+  const [birthMonth, setBirthMonth] = uS("");
+  const [birthDay, setBirthDay] = uS("");
+  const [question, setQuestion] = uS("");
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!name.trim()) { alert("お名前を入力してください"); return; }
+    const info = {
+      name: name.trim(),
+      birthday: birthMonth && birthDay ? { year: parseInt(birthYear) || null, month: parseInt(birthMonth), day: parseInt(birthDay) } : null,
+      question: question.trim() || null,
+    };
+    onSubmit(info);
+  };
+
+  const themeMeta = THEMES.find(t => t.id === theme);
+
+  return (
+    <div className="screen customer-info">
+      <button className="back-btn" onClick={onBack}>← 結果に戻る</button>
+      <div className="screen-head">
+        <p className="kicker">PERSONAL READING</p>
+        <h2 className="screen-title">パーソナル鑑定</h2>
+        <p className="screen-sub">あなたの情報をお教えください。星々がより深いメッセージを届けます。</p>
+      </div>
+
+      <form className="ci-form" onSubmit={handleSubmit}>
+        <div className="ci-group">
+          <label className="ci-label">お名前 <span className="ci-required">必須</span></label>
+          <input
+            type="text"
+            className="ci-input"
+            placeholder="例：田中 花子"
+            value={name}
+            onChange={e => setName(e.target.value)}
+            autoFocus
+          />
+        </div>
+
+        <div className="ci-group">
+          <label className="ci-label">生年月日 <span className="ci-optional">任意</span></label>
+          <p className="ci-hint">星座をもとに、より深い鑑定をお届けします</p>
+          <div className="ci-date-row">
+            <input
+              type="number"
+              className="ci-input ci-input-year"
+              placeholder="1990"
+              min="1920"
+              max="2025"
+              value={birthYear}
+              onChange={e => setBirthYear(e.target.value)}
+            />
+            <span className="ci-date-sep">年</span>
+            <select className="ci-input ci-input-month" value={birthMonth} onChange={e => setBirthMonth(e.target.value)}>
+              <option value="">月</option>
+              {Array.from({ length: 12 }, (_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}
+            </select>
+            <span className="ci-date-sep">月</span>
+            <select className="ci-input ci-input-day" value={birthDay} onChange={e => setBirthDay(e.target.value)}>
+              <option value="">日</option>
+              {Array.from({ length: 31 }, (_, i) => <option key={i} value={i + 1}>{i + 1}</option>)}
+            </select>
+            <span className="ci-date-sep">日</span>
+          </div>
+          {birthMonth && birthDay && (
+            <div className="ci-zodiac-preview">
+              {(() => {
+                const z = getZodiacSign(parseInt(birthMonth), parseInt(birthDay));
+                return `${z.symbol} ${z.name}（${z.en}）`;
+              })()}
+            </div>
+          )}
+        </div>
+
+        <div className="ci-group">
+          <label className="ci-label">今、心にある問いかけ <span className="ci-optional">任意</span></label>
+          <p className="ci-hint">具体的な悩みや質問があれば、鑑定に反映します</p>
+          <textarea
+            className="ci-input ci-textarea"
+            placeholder="例：転職すべきか迷っています / 好きな人との今後が知りたい / 今年後半の運気は？"
+            value={question}
+            onChange={e => setQuestion(e.target.value)}
+            rows="3"
+          />
+        </div>
+
+        <div className="ci-submit-area">
+          <button type="submit" className="btn-primary btn-personal-submit">
+            ✦ 鑑定書を作成する
+          </button>
+          <p className="ci-privacy">入力情報はブラウザ上のみで処理され、外部に送信されません。</p>
+        </div>
+      </form>
+    </div>
+  );
+};
+
+// ─────────── 画面：パーソナル鑑定結果 ───────────
+const PersonalReadingScreen = ({ reading, onRestart, onBack }) => {
+  const [pdfReady, setPdfReady] = uS(false);
+
+  uE(() => {
+    const timer = setTimeout(() => setPdfReady(true), 500);
+    return () => clearTimeout(timer);
+  }, []);
+
+  if (!reading) return null;
+
+  return (
+    <div className="screen personal-reading">
+      <div className="screen-head">
+        <p className="kicker">PERSONAL READING</p>
+        <h2 className="screen-title">{reading.customerName} 様の鑑定書</h2>
+        <p className="screen-sub">{reading.theme} · {reading.date}</p>
+      </div>
+
+      <div className="pr-sections">
+        {reading.sections.map((section, idx) => (
+          <div key={idx} className={`pr-section ${section.isLucky ? "pr-lucky" : ""}`}>
+            <div className="pr-section-header">
+              <span className="pr-section-num">{String(idx + 1).padStart(2, "0")}</span>
+              <h3 className="pr-section-title">{section.title}</h3>
+              {section.subtitle && <div className="pr-section-subtitle">{section.subtitle}</div>}
+            </div>
+            {section.keywords && (
+              <div className="pr-keywords">
+                {section.keywords.map((kw, ki) => <span key={ki} className="kw">{kw}</span>)}
+              </div>
+            )}
+            <div className="pr-section-body">{section.body}</div>
+          </div>
+        ))}
+      </div>
+
+      <div className="pr-actions">
+        <button
+          className="btn-primary btn-pdf"
+          onClick={() => exportPDF(reading.customerName)}
+          disabled={!pdfReady}
+        >
+          {pdfReady ? "✦ 鑑定書をPDFでダウンロード" : "準備中…"}
+        </button>
+        <div className="pr-sub-actions">
+          <button className="btn-ghost" onClick={onBack}>← 結果に戻る</button>
+          <button className="btn-ghost" onClick={onRestart}>もう一度占う</button>
+        </div>
+      </div>
+
+      <PersonalReadingPDFContent reading={reading} />
     </div>
   );
 };
@@ -427,6 +590,8 @@ window.LandingScreen = LandingScreen;
 window.ThemeScreen = ThemeScreen;
 window.SelectScreen = SelectScreen;
 window.ResultScreen = ResultScreen;
+window.CustomerInfoScreen = CustomerInfoScreen;
+window.PersonalReadingScreen = PersonalReadingScreen;
 window.HistoryScreen = HistoryScreen;
 window.Starfield = Starfield;
 window.useSound = useSound;
